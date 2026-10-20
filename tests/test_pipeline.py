@@ -4,7 +4,7 @@ from threading import Event
 import pytest
 
 from tribonian.domain import ApiError, Cancelled, Source, Unit
-from tribonian.pipeline import analyze, render_report, save_report, verification_context
+from tribonian.pipeline import analyze, parse_analysis, render_report, save_report, verification_context
 from tribonian.sources import drive_id, local_sources
 
 
@@ -17,13 +17,15 @@ class FakeModel:
         self.fail_map = fail_map
         self.fail_summary = fail_summary
 
-    def complete(self, prompt, images=None, max_tokens=3000):
+    def complete(self, prompt, images=None, max_tokens=3000, json_mode=False):
         self.prompts.append(prompt)
         self.requests += 1
         if self.fail_map and prompt.startswith("Проанализируй"):
             raise ApiError("HTTP 429: лимит")
         if self.fail_summary and prompt.startswith("Составь общий"):
             raise ApiError("HTTP 503: сервис недоступен")
+        if json_mode:
+            return json.dumps({"status": "read", "summary": "Проверенные факты [F1].", "limitations": ""})
         return "## Главное\nПроверенные факты [F1]."
 
 
@@ -167,3 +169,30 @@ def test_small_folder_final_verification_excludes_unread_sources():
     assert "Проверяемый факт" in text
     assert "Не подтверждено" not in text
     assert len(images) == 1
+
+
+@pytest.mark.parametrize("status", ["partial", "unread"])
+def test_model_reported_readability_controls_file_status(tmp_path, status):
+    (tmp_path / "scan.txt").write_text("Неразборчивый фрагмент", encoding="utf-8")
+
+    class ReadabilityModel(FakeModel):
+        def complete(self, prompt, images=None, max_tokens=3000, json_mode=False):
+            if json_mode:
+                return json.dumps(
+                    {
+                        "status": status,
+                        "summary": "Доступная часть" if status == "partial" else "",
+                        "limitations": "Мелкий текст не читается.",
+                    }
+                )
+            return "Предположение, содержимое не проверено."
+
+    report = run(tmp_path, ReadabilityModel())
+    assert report.sources[0].status == ("Частично" if status == "partial" else "Не прочитан")
+    assert "Мелкий текст" in report.sources[0].error
+
+
+@pytest.mark.parametrize("response", ["[]", '{"status":"read"}', "not json"])
+def test_invalid_analysis_is_not_accepted(response):
+    with pytest.raises(ApiError):
+        parse_analysis(response)

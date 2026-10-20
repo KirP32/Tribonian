@@ -30,7 +30,9 @@ class OpenRouter:
     def close(self) -> None:
         self.session.close()
 
-    def complete(self, prompt: str, images: list[str] | None = None, max_tokens: int = 3000) -> str:
+    def complete(
+        self, prompt: str, images: list[str] | None = None, max_tokens: int = 3000, json_mode: bool = False
+    ) -> str:
         content = [{"type": "text", "text": prompt}]
         for image in images or []:
             content.append({"type": "image_url", "image_url": {"url": image}})
@@ -44,6 +46,8 @@ class OpenRouter:
             "temperature": 0.2,
             "reasoning": {"effort": "low", "exclude": True},
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
         error = "OpenRouter не ответил."
         for attempt in range(4):
             checkpoint(self.cancel)

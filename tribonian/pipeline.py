@@ -17,7 +17,15 @@ MAP_PROMPT = """Проанализируй фрагмент источника [
 Для изображения прочитай доступный текст, опиши смысл, схему и важные детали.
 Не угадывай неразборчивый текст. В каждом тематическом пункте укажи [{id}]
 и при наличии страницу. Это часть материала: не делай вывод о всей папке.
-Пиши компактно, до 600 слов.
+Верни только JSON-объект с полями:
+status: "read", "partial" или "unread";
+summary: строка с выжимкой, до 600 слов;
+limitations: строка с конкретной причиной неполного прочтения, иначе пустая.
+"read" означает, что всё значимое предоставленное содержимое читается.
+"partial" означает, что часть предоставленных данных неразборчива.
+"unread" означает, что содержательно прочитать фрагмент не удалось.
+Сам по себе отрывок документа не означает "partial": оценивай читаемость
+переданных данных, а не наличие всего кодекса или книги.
 
 ДАННЫЕ:
 {text}"""
@@ -69,6 +77,26 @@ def source_manifest(sources: list[Source]) -> str:
         ],
         ensure_ascii=False,
     )
+
+
+def parse_analysis(response: str) -> tuple[str, str, str]:
+    try:
+        data = json.loads(response)
+    except json.JSONDecodeError:
+        raise ApiError("Модель вернула невалидный JSON анализа.") from None
+    if not isinstance(data, dict):
+        raise ApiError("Модель вернула неверную структуру анализа.")
+    status = data.get("status")
+    summary = data.get("summary")
+    limitations = data.get("limitations")
+    if (
+        status not in ("read", "partial", "unread")
+        or not isinstance(summary, str)
+        or not isinstance(limitations, str)
+        or (status != "unread" and not summary.strip())
+    ):
+        raise ApiError("Модель не подтвердила читаемость фрагмента в ожидаемом формате.")
+    return status, summary.strip(), limitations.strip()
 
 
 def verification_context(prepared: list[tuple[Source, list[Unit]]]) -> tuple[str, list[str]]:
@@ -217,7 +245,7 @@ def analyze(
                         )
                     )
                     try:
-                        note = api.complete(
+                        response = api.complete(
                             MAP_PROMPT.format(
                                 id=source.id,
                                 name=source.name,
@@ -226,9 +254,15 @@ def analyze(
                             ),
                             unit.images,
                             max_tokens=6500,
+                            json_mode=True,
                         )
-                        source.notes.append(f"[{source.id}] {unit.label}\n{note}")
-                        source.completed += 1
+                        reading_status, note, limitation = parse_analysis(response)
+                        if reading_status != "read":
+                            reason = limitation or "Модель не смогла полностью прочитать фрагмент."
+                            source.error = "; ".join(filter(None, [source.error, f"{unit.label}: {reason}"]))
+                        if reading_status != "unread":
+                            source.notes.append(f"[{source.id}] {unit.label}\n{note}")
+                            source.completed += 1
                     except ApiError as error:
                         source.error = "; ".join(filter(None, [source.error, f"{unit.label}: {error}"]))
                         emit(
