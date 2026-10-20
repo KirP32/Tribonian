@@ -141,8 +141,7 @@ def render_report(report: Report) -> str:
     rows.extend(
         [
             "",
-            f"Модель: `{report.model}`. Запросов: {report.requests}. "
-            f"Токенов: {report.tokens:,}. Стоимость по API: ${report.cost:.6f}.",
+            f"Запросов: {report.requests}. Токенов: {report.tokens:,}. Стоимость по API: ${report.cost:.6f}.",
         ]
     )
     if report.warning:
