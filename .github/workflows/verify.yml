@@ -37,7 +37,7 @@ jobs:
       - run: uv run pytest -q
       - name: Build Windows desktop app
         if: runner.os == 'Windows'
-        run: uv run pyinstaller --noconfirm --clean --windowed --onedir --name Tribonian --collect-all pypdfium2 --collect-all pypdfium2_raw run_app.py
+        run: uv run pyinstaller --noconfirm --clean --windowed --onedir --name Tribonian --copy-metadata gdown --collect-all pypdfium2 --collect-all pypdfium2_raw run_app.py
       - name: Packaged app startup check
         if: runner.os == 'Windows'
         shell: pwsh

@@ -66,7 +66,7 @@ OPENROUTER_MODEL=minimax/minimax-m3.1-flash:free
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install ".[dev]"
-.\.venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --onedir --name Tribonian --collect-all pypdfium2 --collect-all pypdfium2_raw run_app.py
+.\.venv\Scripts\pyinstaller.exe --noconfirm --clean --windowed --onedir --name Tribonian --copy-metadata gdown --collect-all pypdfium2 --collect-all pypdfium2_raw run_app.py
 ```
 
 Результат находится в `dist/Tribonian/`. Сборку `.exe` нужно выполнять на Windows; PyInstaller не является кросс-компилятором.
