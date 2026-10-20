@@ -4,7 +4,7 @@ Summary локальной папки или Google Drive. Читает доку
 
 ## Готовая программа для Windows
 
-В [Actions](https://github.com/KirP32/Tribonian/actions/workflows/verify.yml) откройте последний успешный запуск и скачайте **Tribonian-Windows**. Распакуйте весь архив и запустите `Tribonian.exe`, сохранив папку `_internal` рядом. Python не нужен; для скачивания может потребоваться вход в GitHub.
+В [последнем релизе](https://github.com/KirP32/Tribonian/releases/latest) скачайте **Tribonian-Windows-x64.zip**. Распакуйте весь архив и запустите `Tribonian/Tribonian.exe`, сохранив папку `_internal` рядом. Python не нужен.
 
 На macOS и Linux запускайте приложение из кода по инструкции ниже.
 
