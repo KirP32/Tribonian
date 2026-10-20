@@ -2,6 +2,8 @@
 
 Summary локальной папки или Google Drive. Читает документы и изображения, показывает прогресс и ошибки по файлам. Предположения о непрочитанных файлах отмечает отдельно.
 
+![Интерфейс программы Tribonian](docs/interface.png)
+
 ## Готовая программа для Windows
 
 В [последнем релизе](https://github.com/KirP32/Tribonian/releases/latest) скачайте **Tribonian-Windows-x64.zip**. Распакуйте весь архив и запустите `Tribonian/Tribonian.exe`, сохранив папку `_internal` рядом. Python не нужен.
