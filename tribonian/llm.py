@@ -30,9 +30,7 @@ class OpenRouter:
     def close(self) -> None:
         self.session.close()
 
-    def complete(
-        self, prompt: str, images: list[str] | None = None, max_tokens: int = 3000, json_mode: bool = False
-    ) -> str:
+    def complete(self, prompt: str, images: list[str] | None = None, json_mode: bool = False) -> str:
         content = [{"type": "text", "text": prompt}]
         for image in images or []:
             content.append({"type": "image_url", "image_url": {"url": image}})
@@ -42,7 +40,6 @@ class OpenRouter:
                 {"role": "system", "content": SYSTEM},
                 {"role": "user", "content": content},
             ],
-            "max_tokens": max_tokens,
             "temperature": 0.2,
             "reasoning": {"effort": "low", "exclude": True},
         }
@@ -96,13 +93,7 @@ class OpenRouter:
                         raise ApiError("OpenRouter вернул некорректное сообщение.")
                     text = message.get("content")
                     if choice.get("finish_reason") == "length":
-                        if attempt < 3 and payload["max_tokens"] < 16000:
-                            payload["max_tokens"] = min(payload["max_tokens"] * 2, 16000)
-                            self.emit(
-                                Progress("Ожидание LLM", "Ответ обрезан. Повтор с увеличенным лимитом…")
-                            )
-                            continue
-                        raise ApiError("Ответ модели обрезан лимитом токенов; результат не принят.")
+                        raise ApiError("Провайдер прервал ответ до завершения; результат не принят.")
                     if not isinstance(text, str) or not text.strip():
                         raise ApiError("Модель вернула пустой ответ.")
                     return text.strip()

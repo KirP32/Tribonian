@@ -3,7 +3,7 @@ from pathlib import Path
 from threading import Event
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -35,41 +35,49 @@ from tribonian.llm import OpenRouter
 from tribonian.pipeline import analyze, render_report, save_report
 
 STYLE = """
-QMainWindow { background: #f2f4f9; }
-QWidget { font-family: "Inter", "Segoe UI", "Arial"; color: #26334a; font-size: 13px; }
-QFrame#card { background: white; border: 1px solid #e2e6ee; border-radius: 16px; }
-QLabel#title { font-size: 27px; font-weight: 700; color: #17243b; }
-QLabel#subtitle, QLabel#muted { color: #728097; }
+QMainWindow, QWidget#canvas, QWidget#sidebar { background: #000000; }
+QWidget { font-family: "Inter", "Segoe UI", "Arial"; color: #ffffff; font-size: 13px; }
+QFrame#card { background: #171717; border: 1px solid #2d2d2d; border-radius: 16px; }
+QLabel#title { font-size: 27px; font-weight: 700; color: #ffffff; }
+QLabel#muted { color: #bdbdbd; }
 QLabel#section { font-size: 16px; font-weight: 600; }
-QLabel#eyebrow { color: #7160d5; font-size: 11px; font-weight: 700; }
-QLabel#brand { background: #6c58d9; color: white; border-radius: 12px;
+QLabel#eyebrow { color: #ffc700; font-size: 11px; font-weight: 700; }
+QLabel#brand { background: #ffc700; color: #050102; border-radius: 12px;
     font-size: 25px; font-weight: 700; padding: 7px; }
-QLabel#badge { background: #ece9fc; color: #6351c9; padding: 7px 12px; border-radius: 12px; }
-QLineEdit, QComboBox { background: #f8f9fc; border: 1px solid #dce1eb;
-    border-radius: 8px; padding: 8px; min-height: 18px; selection-background-color: #d9d2fb; }
-QLineEdit:focus, QComboBox:focus { border-color: #8a77e4; }
-QPushButton { background: #f7f8fb; border: 1px solid #dfe4ed; border-radius: 8px;
+QLineEdit, QComboBox { background: #242424; border: 1px solid #3f3f3f;
+    border-radius: 8px; padding: 8px; min-height: 18px;
+    selection-background-color: #ffc700; selection-color: #050102; }
+QLineEdit:focus, QComboBox:focus { border-color: #ffc700; }
+QComboBox QAbstractItemView { background: #242424; color: #ffffff;
+    selection-background-color: #ffc700; selection-color: #050102; }
+QPushButton { background: #242424; border: 1px solid #3f3f3f; border-radius: 8px;
     padding: 7px 12px; min-height: 18px; font-weight: 500; }
-QPushButton:hover { background: #eeebfb; border-color: #b6a8ed; }
-QPushButton:disabled { color: #a3aabb; background: #f4f5f8; }
-QPushButton#primary { background: #6c58d9; color: white; border: 0;
+QPushButton:hover { background: #333333; border-color: #ffc700; }
+QPushButton:disabled { color: #757575; background: #202020; border-color: #2d2d2d; }
+QPushButton#primary { background: #ffc700; color: #050102; border: 0;
     padding: 12px; font-weight: 600; }
-QPushButton#primary:hover { background: #5b46c4; }
-QPushButton#primary:disabled { background: #b9b0e5; }
-QPushButton#stop { color: #a24454; }
-QProgressBar { border: none; border-radius: 4px; background: #eceef5;
+QPushButton#primary:hover { background: #ffda52; }
+QPushButton#primary:disabled { background: #78641f; color: #c6bd9c; }
+QPushButton#stop { color: #f5a3a3; }
+QPushButton#stop:disabled { color: #757575; }
+QProgressBar { border: none; border-radius: 4px; background: #333333;
     height: 7px; text-align: center; }
-QProgressBar::chunk { border-radius: 4px; background: #8a77e4; }
-QTableWidget { background: white; border: none; gridline-color: #f0f2f7;
-    selection-background-color: #eeebfc; selection-color: #26334a; }
-QHeaderView::section { background: #f7f8fb; color: #7a879c; border: none;
+QProgressBar::chunk { border-radius: 4px; background: #ffc700; }
+QTableWidget { background: #171717; border: none; gridline-color: #333333;
+    selection-background-color: #3b341d; selection-color: #ffffff; }
+QHeaderView::section { background: #242424; color: #bdbdbd; border: none;
     padding: 8px; text-align: left; font-size: 11px; }
-QTextBrowser { background: white; border: none; padding: 14px; font-size: 14px; }
-QPlainTextEdit { background: #f7f8fb; border: 1px solid #e2e6ee; border-radius: 8px;
+QTextBrowser { background: #171717; border: none; padding: 14px; font-size: 14px; }
+QPlainTextEdit { background: #111111; border: 1px solid #333333; border-radius: 8px;
     font-family: "SF Mono", "Consolas", monospace; font-size: 11px; padding: 5px; }
 QSplitter::handle { background: transparent; width: 18px; }
 QScrollArea { border: none; background: transparent; }
-QToolTip { background: #26334a; color: white; border: none; padding: 8px; }
+QScrollBar:vertical { background: #171717; width: 8px; margin: 0; }
+QScrollBar::handle:vertical { background: #555555; border-radius: 4px; min-height: 24px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QStatusBar { background: #000000; color: #bdbdbd; }
+QToolTip { background: #333333; color: #ffffff; border: none; padding: 8px; }
 """
 
 
@@ -108,7 +116,7 @@ class Worker(QThread):
             if self.check:
                 api = OpenRouter(self.key, self.model, self.cancel, self.progress.emit)
                 try:
-                    answer = api.complete("Ответь одним словом: готов.", max_tokens=256)
+                    answer = api.complete("Ответь одним словом: готов.")
                     self.result.emit(f"API работает · ответ: {answer} · стоимость ${api.cost:.6f}")
                 finally:
                     api.close()
@@ -140,7 +148,22 @@ class Window(QMainWindow):
         self.resize(1240, 900)
         self.setMinimumSize(1000, 740)
         self.setStyleSheet(STYLE)
+        palette = self.palette()
+        for role, color in [
+            (QPalette.ColorRole.Window, "#171717"),
+            (QPalette.ColorRole.WindowText, "#ffffff"),
+            (QPalette.ColorRole.Base, "#171717"),
+            (QPalette.ColorRole.Text, "#ffffff"),
+            (QPalette.ColorRole.Button, "#242424"),
+            (QPalette.ColorRole.ButtonText, "#ffffff"),
+            (QPalette.ColorRole.Highlight, "#ffc700"),
+            (QPalette.ColorRole.HighlightedText, "#050102"),
+            (QPalette.ColorRole.PlaceholderText, "#909090"),
+        ]:
+            palette.setColor(role, QColor(color))
+        self.setPalette(palette)
         root = QWidget()
+        root.setObjectName("canvas")
         self.setCentralWidget(root)
         main = QVBoxLayout(root)
         main.setContentsMargins(30, 26, 30, 24)
@@ -153,15 +176,14 @@ class Window(QMainWindow):
         heading = QVBoxLayout()
         heading.setSpacing(3)
         heading.addWidget(label("Tribonian", "title"))
-        heading.addWidget(label("Вся папка. Одна ясная картина.", "subtitle"))
         header.addLayout(heading)
         header.addStretch()
-        header.addWidget(label("ТЕКСТ + ИЗОБРАЖЕНИЯ", "badge"))
         main.addLayout(header)
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setHandleWidth(18)
         main.addWidget(split, 1)
         left = QWidget()
+        left.setObjectName("sidebar")
         left.setMinimumWidth(360)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -202,11 +224,8 @@ class Window(QMainWindow):
                 True,
             )
         )
-        form.addWidget(label("02 / МОДЕЛЬ", "eyebrow"))
-        key, model = load_settings()
-        self.model = QLineEdit(model)
-        self.model.setAccessibleName("Модель OpenRouter")
-        form.addWidget(self.model)
+        form.addWidget(label("02 / ДОСТУП", "eyebrow"))
+        key, self.model_name = load_settings()
         self.key = QLineEdit(key)
         self.key.setEchoMode(QLineEdit.EchoMode.Password)
         self.key.setPlaceholderText("Ключ OpenRouter · sk-or-v1-…")
@@ -289,17 +308,18 @@ class Window(QMainWindow):
         result_header.addWidget(self.copy)
         result_header.addWidget(self.save)
         result_layout.addLayout(result_header)
-        self.coverage = label("Главное, связи между документами и пробелы в данных.", "muted", True)
+        self.coverage = label("", "muted", True)
+        self.coverage.hide()
         result_layout.addWidget(self.coverage)
         self.result_pages = QStackedWidget()
         welcome = QWidget()
         welcome_layout = QVBoxLayout(welcome)
         welcome_layout.addStretch()
         icon = label("≋", "title")
-        icon.setStyleSheet("font-size: 70px; color: #a99ae7;")
+        icon.setStyleSheet("font-size: 70px; color: #ffc700;")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         welcome_layout.addWidget(icon)
-        empty_title = label("От документов к общей картине", "section")
+        empty_title = label("Суммарный итог по папке", "section")
         empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         welcome_layout.addWidget(empty_title)
         empty_text = label(
@@ -318,9 +338,9 @@ class Window(QMainWindow):
         self.summary.setOpenExternalLinks(False)
         self.summary.setOpenLinks(False)
         self.summary.document().setDefaultStyleSheet(
-            "h1 {color:#17243b; font-size:24px;} h2 {color:#514494; margin-top:22px;}"
+            "h1 {color:#ffffff; font-size:24px;} h2 {color:#ffc700; margin-top:22px;}"
             "p, li {line-height:1.55;} table {border-collapse:collapse;}"
-            "td, th {padding:7px; border:1px solid #e2e6ee;}"
+            "td, th {padding:7px; border:1px solid #3f3f3f;}"
         )
         self.result_pages.addWidget(self.summary)
         result_layout.addWidget(self.result_pages, 1)
@@ -332,7 +352,6 @@ class Window(QMainWindow):
         result_layout.addWidget(self.log)
         split.addWidget(result_card)
         split.setSizes([400, 780])
-        self.statusBar().showMessage("MiniMax M3.1 Flash · OpenRouter")
 
     def toggle_key(self, checked: bool) -> None:
         self.key.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password)
@@ -348,8 +367,8 @@ class Window(QMainWindow):
             return
         drive = self.mode.currentIndex() == 0
         value = self.drive_url.text().strip() if drive else self.folder.text().strip()
-        if not self.key.text().strip() or not self.model.text().strip():
-            self.show_error("Укажите ключ и модель OpenRouter.")
+        if not self.key.text().strip():
+            self.show_error("Укажите ключ OpenRouter.")
             return
         if not check and not value:
             self.show_error("Выберите локальную папку или вставьте ссылку Google Drive.")
@@ -363,13 +382,14 @@ class Window(QMainWindow):
             self.save.setEnabled(False)
             self.result_pages.setCurrentIndex(0)
             self.coverage.setText("Обрабатываем файлы. Результат появится после завершения.")
+            self.coverage.show()
         self.start_button.setEnabled(False)
         self.check_button.setEnabled(False)
         self.stop.setEnabled(True)
         self.phase.setText("Проверка API" if check else "Запуск")
         self.detail.setText("Ожидаем ответ…" if check else "Получаем содержимое папки…")
         self.progress.setRange(0, 0)
-        self.worker = Worker(value, drive, self.key.text().strip(), self.model.text().strip(), check)
+        self.worker = Worker(value, drive, self.key.text().strip(), self.model_name, check)
         self.worker.progress.connect(self.on_progress)
         self.worker.result.connect(self.on_result)
         self.worker.failed.connect(self.show_error)
@@ -423,6 +443,7 @@ class Window(QMainWindow):
                 "Готово" if full == len(result.sources) and not result.warning else "Есть пробелы"
             )
             self.coverage.setText(f"Прочитано: {full} · Частично: {partial} · Не прочитано: {failed}")
+            self.coverage.show()
             self.detail.setText(
                 result.warning or f"Проанализировано {full + partial} из {len(result.sources)} файлов."
             )
@@ -437,7 +458,7 @@ class Window(QMainWindow):
                     self.files.setItem(row, 0, item)
                     status = QTableWidgetItem(source.status)
                     status.setToolTip(source.error or f"Обработано частей: {source.completed}/{source.units}")
-                    status.setForeground(QColor("#24816c" if source.status == "Прочитан" else "#b66b31"))
+                    status.setForeground(QColor("#8fd6af" if source.status == "Прочитан" else "#ffc700"))
                     self.files.setItem(row, 1, status)
 
     def show_error(self, message: str) -> None:
@@ -449,6 +470,7 @@ class Window(QMainWindow):
         self.progress.setValue(0)
         if self.report is None:
             self.coverage.setText("Обработка не завершена: " + message)
+            self.coverage.show()
 
     def on_finished(self) -> None:
         if self.worker:

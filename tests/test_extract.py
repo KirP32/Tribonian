@@ -18,7 +18,11 @@ def contents(path: Path) -> str:
     return "\n".join(unit.text for unit in extract_units(path, Event()))
 
 
-@pytest.mark.parametrize("text", ["", "word " * 50000, "строка\n" * 30000, "x" * 160001])
+@pytest.mark.parametrize(
+    "text",
+    ["", "word " * 50000, "строка\n" * 30000, "x" * 160001],
+    ids=["empty", "long-words", "cyrillic-lines", "no-separators"],
+)
 def test_chunking_preserves_every_character(text):
     result = list(chunks(text))
     assert "".join(result) == text

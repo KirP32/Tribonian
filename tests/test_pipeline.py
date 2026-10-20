@@ -17,7 +17,7 @@ class FakeModel:
         self.fail_map = fail_map
         self.fail_summary = fail_summary
 
-    def complete(self, prompt, images=None, max_tokens=3000, json_mode=False):
+    def complete(self, prompt, images=None, json_mode=False):
         self.prompts.append(prompt)
         self.requests += 1
         if self.fail_map and prompt.startswith("Проанализируй"):
@@ -176,7 +176,7 @@ def test_model_reported_readability_controls_file_status(tmp_path, status):
     (tmp_path / "scan.txt").write_text("Неразборчивый фрагмент", encoding="utf-8")
 
     class ReadabilityModel(FakeModel):
-        def complete(self, prompt, images=None, max_tokens=3000, json_mode=False):
+        def complete(self, prompt, images=None, json_mode=False):
             if json_mode:
                 return json.dumps(
                     {
@@ -196,3 +196,24 @@ def test_model_reported_readability_controls_file_status(tmp_path, status):
 def test_invalid_analysis_is_not_accepted(response):
     with pytest.raises(ApiError):
         parse_analysis(response)
+
+
+def test_large_folder_is_reduced_in_groups_before_final_summary(tmp_path):
+    for number in range(3):
+        (tmp_path / f"document-{number}.txt").write_text(f"Файл {number}", encoding="utf-8")
+
+    class LargeModel(FakeModel):
+        def complete(self, prompt, images=None, json_mode=False):
+            if json_mode:
+                self.prompts.append(prompt)
+                self.requests += 1
+                return json.dumps({"status": "read", "summary": "Факт. " * 9000, "limitations": ""})
+            return super().complete(prompt, images)
+
+    model = LargeModel()
+    report = run(tmp_path, model)
+    group_requests = [p for p in model.prompts if p.startswith("Сожми записи")]
+    assert len(group_requests) >= 3
+    assert model.prompts[-1].startswith("Составь общий")
+    assert all(s.status == "Прочитан" for s in report.sources)
+    assert not report.warning

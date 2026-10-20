@@ -4,7 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
 
 from tribonian.domain import Progress, Report, Source
 from tribonian.gui import Window
@@ -16,6 +16,11 @@ def test_ui_source_switch_result_copy_and_failure_status(monkeypatch):
     window = Window()
     window.show()
     app.processEvents()
+    labels = [item.text() for item in window.findChildren(QLabel)]
+    assert "Суммарный итог по папке" in labels
+    assert "Вся папка. Одна ясная картина." not in labels
+    assert "ТЕКСТ + ИЗОБРАЖЕНИЯ" not in labels
+    assert not any(field.accessibleName() == "Модель OpenRouter" for field in window.findChildren(QLineEdit))
     window.mode.setCurrentIndex(1)
     assert window.folder.isVisible()
     assert not window.drive_url.isVisible()

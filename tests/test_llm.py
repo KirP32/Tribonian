@@ -39,6 +39,8 @@ def test_real_request_shape_and_usage(monkeypatch):
     payload = observed[0][1]["json"]
     assert payload["model"].endswith(":free")
     assert payload["messages"][1]["content"][1]["type"] == "image_url"
+    assert "max_tokens" not in payload
+    assert "max_completion_tokens" not in payload
     assert api.tokens == 17 and api.cost == 0
 
 
@@ -79,14 +81,9 @@ def test_network_error_can_be_cancelled(monkeypatch):
         api.complete("test")
 
 
-def test_truncation_retries_with_larger_limit(monkeypatch):
+def test_provider_truncation_is_not_reported_as_success(monkeypatch):
     api = client()
-    limits = []
-
-    def post(url, **kwargs):
-        limits.append(kwargs["json"]["max_tokens"])
-        return Response(finish="length" if len(limits) == 1 else "stop")
-
-    monkeypatch.setattr(api.session, "post", post)
-    assert api.complete("test", max_tokens=1000) == "Готово"
-    assert limits == [1000, 2000]
+    monkeypatch.setattr(api.session, "post", lambda *a, **k: Response(finish="length"))
+    with pytest.raises(ApiError, match="Провайдер прервал"):
+        api.complete("test")
+    assert api.requests == 1
