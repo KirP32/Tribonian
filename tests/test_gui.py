@@ -20,6 +20,7 @@ def test_ui_source_switch_result_copy_and_failure_status(monkeypatch):
     assert "Суммарный итог по папке" in labels
     assert "Вся папка. Одна ясная картина." not in labels
     assert "ТЕКСТ + ИЗОБРАЖЕНИЯ" not in labels
+    assert not any("отправляется в OpenRouter" in text for text in labels)
     assert not any(field.accessibleName() == "Модель OpenRouter" for field in window.findChildren(QLineEdit))
     window.mode.setCurrentIndex(1)
     assert window.folder.isVisible()
@@ -27,12 +28,19 @@ def test_ui_source_switch_result_copy_and_failure_status(monkeypatch):
     assert window.key.echoMode() == window.key.EchoMode.Password
     window.on_progress(Progress("Чтение", "budget.xls", 0, 1, "F1", "Чтение"))
     source = Source("F1", "budget.xls", None, status="Не прочитан", error="Формат не поддерживается")
-    report = Report("Предположение, содержимое не проверено: бюджет.", [source], "model", 1, 100, 0)
+    report = Report(
+        "# Summary\n\nПредположение, содержимое не проверено: бюджет [F1].", [source], "model", 1, 100, 0
+    )
     window.on_result(report)
     assert "Не прочитано: 1" in window.coverage.text()
     assert window.files.item(0, 1).text() == "Не прочитан"
     assert "Предположение" in window.summary.toPlainText()
+    assert "Summary" not in window.summary.toPlainText()
+    assert "[F1]" not in window.summary.toPlainText()
+    assert window.files.item(0, 0).text() == "budget.xls"
     QTest.mouseClick(window.copy, Qt.MouseButton.LeftButton)
     assert "Покрытие файлов" in QApplication.clipboard().text()
+    assert QApplication.clipboard().text().count("# Summary") == 1
+    assert "[F1]" not in QApplication.clipboard().text()
     assert window.start_button.height() >= 35
     window.close()

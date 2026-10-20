@@ -28,7 +28,7 @@ def main() -> None:
         save_report(report, args.output.with_suffix(".json"))
         print(f"\nSummary сохранён: {args.output.resolve()}")
         for item in report.sources:
-            print(f"[{item.id}] {item.status}: {item.name}" + (f" — {item.error}" if item.error else ""))
+            print(f"{item.status}: {item.name}" + (f" — {item.error}" if item.error else ""))
         if report.warning or any(s.status != "Прочитан" for s in report.sources):
             sys.exit(2)
     except KeyboardInterrupt:

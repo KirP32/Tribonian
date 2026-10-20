@@ -245,13 +245,6 @@ class Window(QMainWindow):
         self.start_button.setObjectName("primary")
         self.start_button.clicked.connect(lambda: self.start(False))
         form.addWidget(self.start_button)
-        form.addWidget(
-            label(
-                "Содержимое выбранной папки отправляется в OpenRouter для анализа.",
-                "muted",
-                True,
-            )
-        )
         left_layout.addWidget(source_card)
         progress_card, progress_layout = card()
         progress_layout.setSpacing(10)
@@ -324,7 +317,7 @@ class Window(QMainWindow):
         welcome_layout.addWidget(empty_title)
         empty_text = label(
             "Приложение прочитает файлы, проанализирует изображения\n"
-            "и соберёт общий Summary со ссылками на источники.\n\n"
+            "и соберёт общий Summary.\n\n"
             "Непрочитанные файлы и предположения будут отмечены отдельно.",
             "muted",
             True,
@@ -419,7 +412,7 @@ class Window(QMainWindow):
                 row = self.files.rowCount()
                 self.rows[progress.file_id] = row
                 self.files.insertRow(row)
-                self.files.setItem(row, 0, QTableWidgetItem(f"[{progress.file_id}] {progress.message}"))
+                self.files.setItem(row, 0, QTableWidgetItem(progress.message))
             if progress.status:
                 self.files.setItem(row, 1, QTableWidgetItem(progress.status))
 
@@ -432,7 +425,7 @@ class Window(QMainWindow):
             self.log.appendPlainText(result)
         elif isinstance(result, Report):
             self.report = result
-            self.summary.setMarkdown(render_report(result))
+            self.summary.setMarkdown(render_report(result, include_title=False))
             self.result_pages.setCurrentIndex(1)
             self.copy.setEnabled(True)
             self.save.setEnabled(True)
@@ -453,7 +446,7 @@ class Window(QMainWindow):
             for source in result.sources:
                 row = self.rows.get(source.id)
                 if row is not None:
-                    item = QTableWidgetItem(f"[{source.id}] {source.name}")
+                    item = QTableWidgetItem(source.name)
                     item.setToolTip(source.name + ("\n" + source.error if source.error else ""))
                     self.files.setItem(row, 0, item)
                     status = QTableWidgetItem(source.status)

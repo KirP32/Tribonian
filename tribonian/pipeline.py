@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 from pathlib import Path
 from threading import Event
@@ -8,15 +9,15 @@ from tribonian.extract import chunks, extract_units
 from tribonian.llm import OpenRouter
 from tribonian.sources import drive_sources, local_sources
 
-MAP_PROMPT = """Проанализируй фрагмент источника [{id}] {name}.
+MAP_PROMPT = """Проанализируй фрагмент файла «{name}».
 Расположение: {label}.
 Составь содержательную выжимку: тема, существенные факты, числа, даты, выводы,
 ограничения. Для правовых документов сохрани ключевые правила и исключения.
 Описывай предоставленную редакцию; её актуальность не проверялась.
 Не называй текст закона комментарием без явных признаков комментария.
 Для изображения прочитай доступный текст, опиши смысл, схему и важные детали.
-Не угадывай неразборчивый текст. В каждом тематическом пункте укажи [{id}]
-и при наличии страницу. Это часть материала: не делай вывод о всей папке.
+Не угадывай неразборчивый текст. При необходимости укажи страницу.
+Это часть материала: не делай вывод о всей папке.
 Верни только JSON-объект с полями:
 status: "read", "partial" или "unread";
 summary: строка с содержательной выжимкой;
@@ -40,7 +41,9 @@ FINAL_PROMPT = """Составь общий Summary всей папки на р�
 ## Важные детали и противоречия
 ## Что осталось неизвестным
 ## Предположения о непрочитанных файлах
-Факты сопровождай идентификаторами [F1], [F2].
+Начни с раздела «Главное», без общего заголовка Summary.
+Не используй цифровые метки или коды источников.
+Названия файлов упоминай только там, где это помогает понять связь или пробел.
 Для частично прочитанных источников явно укажи границы доступного.
 Фрагменты могут продолжать друг друга: сопоставь все части перед выводом,
 что какой-либо текст отсутствует. Фрагмент кодекса может составлять весь
@@ -66,7 +69,6 @@ def source_manifest(sources: list[Source]) -> str:
     return json.dumps(
         [
             {
-                "id": source.id,
                 "file": source.name,
                 "status": source.status,
                 "analyzed_parts": source.completed,
@@ -106,10 +108,10 @@ def verification_context(prepared: list[tuple[Source, list[Unit]]]) -> tuple[str
         if source.status != "Прочитан":
             continue
         for unit in units:
-            text.append(f"[{source.id}] {unit.label}\n{unit.text}")
+            text.append(f"{source.name} · {unit.label}\n{unit.text}")
             for image in unit.images:
                 images.append(image)
-                text.append(f"Приложенное изображение №{len(images)}: [{source.id}] {unit.label}")
+                text.append(f"Приложенное изображение №{len(images)}: {source.name} · {unit.label}")
     evidence = "\n\n".join(text)
     if len(evidence) > 80000 or len(images) > 8 or sum(map(len, images)) > 12000000:
         return "", []
@@ -122,20 +124,28 @@ def verification_context(prepared: list[tuple[Source, list[Unit]]]) -> tuple[str
     )
 
 
-def render_report(report: Report) -> str:
-    rows = [
-        "# Summary",
-        "",
-        report.summary,
-        "",
-        "## Покрытие файлов",
-        "",
-        "| Источник | Файл | Статус | Части LLM | Проблема |",
-        "|---|---|---|---|---|",
-    ]
+def summary_body(text: str) -> str:
+    text = re.sub(r"(?im)^[ \t]*#{1,6}[ \t]+Summary[ \t#]*$", "", text)
+    citation = r"\[F\d+\b[^\]\n]*\]"
+    text = re.sub(rf"[ \t]*{citation}(?:[ \t]*[,;]?[ \t]*{citation})*", "", text)
+    return text.strip()
+
+
+def render_report(report: Report, include_title: bool = True) -> str:
+    rows = ["# Summary", ""] if include_title else []
+    rows.extend(
+        [
+            summary_body(report.summary),
+            "",
+            "## Покрытие файлов",
+            "",
+            "| Файл | Статус | Части LLM | Проблема |",
+            "|---|---|---|---|",
+        ]
+    )
     for source in report.sources:
         rows.append(
-            f"| [{source.id}] | {safe_cell(source.name)} | {source.status} | "
+            f"| {safe_cell(source.name)} | {source.status} | "
             f"{source.completed}/{source.units} | {safe_cell(source.error) or '—'} |"
         )
     rows.extend(
@@ -148,7 +158,7 @@ def render_report(report: Report) -> str:
         rows.extend(["", "**Ограничение:** " + report.warning])
     rows.extend(["", "## Источники", ""])
     for source in report.sources:
-        rows.append(f"- [{source.id}] {source.name}" + (f" — {source.origin}" if source.origin else ""))
+        rows.append(f"- {source.name}" + (f" — {source.origin}" if source.origin else ""))
     return "\n".join(rows) + "\n"
 
 
@@ -156,7 +166,7 @@ def save_report(report: Report, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix.lower() == ".json":
         data = {
-            "summary": report.summary,
+            "summary": summary_body(report.summary),
             "model": report.model,
             "requests": report.requests,
             "tokens": report.tokens,
@@ -246,7 +256,6 @@ def analyze(
                     try:
                         response = api.complete(
                             MAP_PROMPT.format(
-                                id=source.id,
                                 name=source.name,
                                 label=unit.label,
                                 text=unit.text,
@@ -259,7 +268,7 @@ def analyze(
                             reason = limitation or "Модель не смогла полностью прочитать фрагмент."
                             source.error = "; ".join(filter(None, [source.error, f"{unit.label}: {reason}"]))
                         if reading_status != "unread":
-                            source.notes.append(f"[{source.id}] {unit.label}\n{note}")
+                            source.notes.append(f"{source.name} · {unit.label}\n{note}")
                             source.completed += 1
                     except ApiError as error:
                         source.error = "; ".join(filter(None, [source.error, f"{unit.label}: {error}"]))
@@ -290,7 +299,7 @@ def analyze(
                         emit(Progress("Общий Summary", f"Объединяем группу {index}…"))
                         reduced.append(
                             api.complete(
-                                "Сожми записи без потери основных тем, чисел, противоречий и ссылок [F…]. "
+                                "Сожми записи без потери основных тем, чисел и противоречий. "
                                 "Сохрани вклад каждого упомянутого источника.\n\n" + group,
                             )
                         )
@@ -316,7 +325,9 @@ def analyze(
                     + "\n\n## Предположения о непрочитанных файлах\n\n"
                     "Модель недоступна; предположения не сформированы."
                 )
-            report = Report(summary, sources, model, api.requests, api.tokens, api.cost, warning)
+            report = Report(
+                summary_body(summary), sources, model, api.requests, api.tokens, api.cost, warning
+            )
             emit(Progress("Готово", "Отчёт готов", 1, 1))
             return report
     finally:

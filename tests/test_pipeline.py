@@ -26,7 +26,7 @@ class FakeModel:
             raise ApiError("HTTP 503: сервис недоступен")
         if json_mode:
             return json.dumps({"status": "read", "summary": "Проверенные факты [F1].", "limitations": ""})
-        return "## Главное\nПроверенные факты [F1]."
+        return "# Summary\n\n## Главное\nПроверенные факты [F1, стр. 9; F2, с. 1–2], [F2]."
 
 
 def run(folder, client=None, emit=None):
@@ -106,6 +106,11 @@ def test_markdown_and_json_exports_include_coverage(tmp_path):
     save_report(report, tmp_path / "summary.md")
     data = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert data["sources"][0]["status"] == "Прочитан"
+    assert data["summary"] == "## Главное\nПроверенные факты."
+    markdown = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert markdown.count("# Summary") == 1
+    assert "[F1]" not in markdown
+    assert "[F2]" not in markdown
     assert "Покрытие файлов" in render_report(report)
     assert "test-key" not in (tmp_path / "summary.json").read_text(encoding="utf-8")
 
