@@ -1,0 +1,60 @@
+name: Test and build Windows app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+          enable-cache: true
+      - name: Linux Qt libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
+      - run: uv sync --locked --extra dev --python 3.12
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - name: Build Windows desktop app
+        if: runner.os == 'Windows'
+        run: uv run pyinstaller --noconfirm --clean --windowed --onedir --name Tribonian --collect-all pypdfium2 --collect-all pypdfium2_raw run_app.py
+      - name: Packaged app startup check
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $appProcess = Start-Process -FilePath ".\dist\Tribonian\Tribonian.exe" -ArgumentList "--smoke-test" -PassThru
+          if (-not $appProcess.WaitForExit(60000)) {
+            $appProcess.Kill()
+            throw "Packaged app did not exit in time"
+          }
+          if ($appProcess.ExitCode -ne 0) {
+            throw "Packaged app exited with code $($appProcess.ExitCode)"
+          }
+      - name: Include launch instructions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item .env.example dist/Tribonian/.env.example
+          Copy-Item README.md dist/Tribonian/README.md
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: Tribonian-Windows
+          path: dist/Tribonian/
+          retention-days: 30
